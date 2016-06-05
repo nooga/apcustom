@@ -6,7 +6,7 @@
    :harmonic-fourth [[0 10] [2 10] [3 20] [6 10] [7 20] [8 10] [10 10] [12 10]]
    :japan [[0 20] [1 20] [5 20] [7 20] [8 20]]})
 
-(def ^:const base 69)
+(def ^:const base 36)
 
 (defn random-pitch-val []
   (int (+ base (* 24 (- 0.5 (Math/random))))))

@@ -12,7 +12,6 @@
         steps-curr (get steps step-num)]
     (when steps-curr
       (async/put! (:seq-out seq) steps-curr))
-    (println steps-curr step-num)
     (swap! state update-in [:sequencer :tick] inc)))
 
 (defn sequencer-logic [state]
@@ -22,11 +21,15 @@
       :tick (do (tick state)
                 (recur (async/<!! (get-in @state [:sequencer :seq-ch])))))))
 
-(defn init-seq [length tick-res bpm]
-  (let [steps-num 16
-        tick-step 10 ;FIXIT: kurwa
-        steps (map #(vector (* tick-step %) {:pitch (scales/random-weighted :phrygian-dominant)}) (range steps-num))]
-    (into {} steps)))
+(defn init-seq [length tick-res]
+  (let [steps-num (* length 16)
+        tick-step (/ tick-res 16)
+        steps (map #(vector (* tick-step %) {:pitch (scales/random-weighted :phrygian-dominant)
+                                             :type :note-on}) (range steps-num))
+        note-off-steps (map (fn [[k v]] (vector (+ k (/ tick-step 2))
+                                               {:pitch (:pitch v)
+                                                :type :note-off})) steps)]
+    (into {} (concat steps note-off-steps))))
 
 (defn clock-logic [state]
   #(async/go-loop [[m p] (async/alts! [(get-in @state [:sequencer :control-ch])
@@ -42,12 +45,14 @@
 
 (defn sequencer [state]
   (let [bpm (:bpm @state)
-        tick-time (/ 60000 bpm (:tick-res @state))
+        tick-res (:tick-res @state)
+        tick-time (/ 60000 (/ bpm 4) tick-res)
         seq-ch (async/chan)
         seq-out (async/chan)
         control-ch (async/chan)
-        init-seq (init-seq 1 (:tick-res @state) bpm)
-        seq {:tick-time tick-time :bpm bpm :control-ch control-ch :seq-out seq-out :steps init-seq :seq-ch seq-ch :length 160 :tick 0}] ;FIXIT calculate length kurwa
+        seq-len 1
+        init-seq (init-seq seq-len tick-res)
+        seq {:tick-time tick-time :bpm bpm :control-ch control-ch :seq-out seq-out :steps init-seq :seq-ch seq-ch :length (* tick-res seq-len) :tick 0}]
     (swap! state assoc :sequencer seq)
     (.start (Thread. (sequencer-logic state)))
-      (.start (Thread. (clock-logic state)))))
+    (.start (Thread. (clock-logic state)))))
